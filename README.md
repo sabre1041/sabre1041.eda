@@ -1,7 +1,8 @@
 # Event-Driven Ansible - sabre1041.eda
 
-Curated set of Event-Driven Ansible content
+[![Build Status](https://github.com/sabre1041/sabre1041.eda/workflows/Lint/badge.svg?branch=main)](https://github.com/sabre1041/sabre1041.eda/actions?workflow=Lint)
 
+Curated set of Event-Driven Ansible content
 
 ## Included Content
 
