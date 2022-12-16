@@ -1,0 +1,13 @@
+---
+
+- name: Listen for ConfigMaps across
+  hosts: all
+  sources:
+    - sabre1041.eda.k8s:
+        api_version: v1
+        kind: ConfigMap
+  rules:
+    - name: Print Add Events
+      condition: event.type == "ADDED"
+      action:
+        debug:

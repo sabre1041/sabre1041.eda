@@ -1,0 +1,33 @@
+---
+
+namespace: sabre1041
+
+name: eda
+
+version: 1.0.0
+
+readme: README.md
+
+authors:
+  - Andrew Block <andy.block@gmail.com>
+
+description: Ansible Event Driven Automation
+
+license_file: 'LICENSE'
+
+tags:
+  - kubernetes
+  - k8s
+  - cloud
+  - infrastructure
+  - eda
+
+dependencies: {}
+
+repository: https://github.com/sabre1041/sabre1041.eda
+
+documentation: https://github.com/sabre1041/sabre1041.eda
+
+issues: https://github.com/sabre1041/sabre1041.eda/issues
+
+build_ignore: []

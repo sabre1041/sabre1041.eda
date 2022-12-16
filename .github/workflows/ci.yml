@@ -1,0 +1,47 @@
+---
+
+name: Lint
+'on':
+  pull_request:
+    branches:
+      - main
+  push:
+    branches:
+      - main
+
+jobs:
+  yamllint:
+    name: yamllint
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out the codebase.
+        uses: actions/checkout@v2
+
+      - name: Set up Python 3.7.
+        uses: actions/setup-python@v2
+        with:
+          python-version: '3.x'
+
+      - name: Install yamllist
+        run: pip3 install yamllint
+
+      - name: Run yamllint.
+        run: yamllint .
+
+  ansible-lint:
+    name: ansible-lint
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout the codebase.
+        uses: actions/checkout@v2
+
+      - name: Set up Python 3.7.
+        uses: actions/setup-python@v2
+        with:
+          python-version: '3.x'
+
+      - name: Install ansible and other packages
+        run: pip3 install ansible ansible-lint
+
+      - name: Run ansible-lint.
+        run: ansible-lint
