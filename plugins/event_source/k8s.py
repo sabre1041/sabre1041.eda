@@ -69,19 +69,27 @@ async def main(queue: asyncio.Queue, args: Dict[str, Any]):
         kind = args.get("kind")
 
         if api_version is None or args.get("kind") is None:
-            raise Exception(f"'api_version' and 'kind' parameters must be provided")  
+            raise Exception(f"'api_version' and 'kind' parameters must be provided")
 
         watcher = watch.Watch()
 
         label_selector = args.get("label_selectors", [])
         field_selector = args.get("field_selectors", [])
+        name = args.get("name")
+
+        # Fix to avoid failing due to https://github.com/kubernetes-client/python/pull/2076
+        ####
+        if name:
+            if not isinstance(field_selector, list):
+                field_selector = field_selector.split(',')
+            field_selector.append(f"metadata.name={name}")
+        ####
 
         if isinstance(label_selector, list):
             label_selector = ",".join(label_selector)
-        
+
         if isinstance(field_selector, list):
             field_selector = ",".join(field_selector)
-        
 
         options = dict(
             watcher=watcher,
@@ -89,7 +97,7 @@ async def main(queue: asyncio.Queue, args: Dict[str, Any]):
             field_selector=field_selector,
         )
 
-        options.update(dict((k, args[k]) for k in ['name', 'namespace'] if k in args))
+        options.update(dict((k, args[k]) for k in ['namespace'] if k in args))
 
         # Handle authentication
         auth_spec = _create_auth_spec(args)
@@ -103,15 +111,18 @@ async def main(queue: asyncio.Queue, args: Dict[str, Any]):
             _set_header(client, header, value)
 
         while True:
-            api = client.resources.get(api_version=api_version, kind=kind)
+            try:
+                api = client.resources.get(api_version=api_version, kind=kind)
 
-            # Get resourceVersion to determine where to start streaming events from
-            options.update(dict(resource_version=int(client.get(api, **options)["metadata"]["resourceVersion"])))
-            
-            for e in client.watch(api, **options):
-                await queue.put(dict(type=e["type"], resource=e["raw_object"]))
-                await asyncio.sleep(1)
-    finally:    
+                # Get resourceVersion to determine where to start streaming events from
+                options.update(dict(resource_version=int(client.get(api, **options)["metadata"]["resourceVersion"])))
+
+                for e in client.watch(api, **options, ):
+                    await queue.put(dict(type=e["type"], resource=e["raw_object"]))
+                    await asyncio.sleep(1)
+            except Exception as e:
+                logger.error("Exception caught: %s", e)
+    finally:
         logger.info("Stopping k8s eda source")
         watcher.stop()
 
