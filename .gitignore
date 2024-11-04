@@ -1,0 +1,7 @@
+*.gz
+.eda-collection
+*.pyc
+.pytest-kind
+kind
+*.tmp
+test-bin/

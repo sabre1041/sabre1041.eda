@@ -1,15 +1,16 @@
 ---
 
-namespace: sabre1041
+namespace: junipernetworks
 
 name: eda
 
-version: 1.0.1
+version: 1.0.57
 
 readme: README.md
 
 authors:
   - Andrew Block <andy.block@gmail.com>
+  - Edwin Jacques <ejacques@juniper.net>
 
 description: Ansible Event Driven Automation
 
@@ -21,13 +22,30 @@ tags:
   - cloud
   - infrastructure
   - eda
+  - junipernetworks
 
 dependencies: {}
 
-repository: https://github.com/sabre1041/sabre1041.eda
+repository: https://github.com/Juniper/k8s.eda
 
-documentation: https://github.com/sabre1041/sabre1041.eda
+documentation: https://github.com/Juniper/k8s.eda
 
-issues: https://github.com/sabre1041/sabre1041.eda/issues
+issues: https://github.com/Juniper/k8s.eda/issues
 
-build_ignore: []
+build_ignore:
+  - .github
+  - .venv
+  - .git
+  - .python-version
+  - .gitignore
+  - Makefile
+  - Pipfile*
+  - junipernetworks-*.tar.gz
+  - .eda-collection
+  - .vscode
+  - pytest.ini
+  - conftest.py
+  - .pytest-kind
+  - .pytest_cache
+  - plugins/.pytest_cache
+  - plugins/event_source/test_k8s.py

@@ -1,8 +1,8 @@
-.. _sabre1041.eda_k8s_source_plugin:
+.. _junipernetworks.eda_k8s_source_plugin:
 
 
 *******************
-sabre1041.eda.k8s
+junipernetworks.eda.k8s
 *******************
 
 **Manage Kubernetes (K8s) objects**
@@ -22,8 +22,8 @@ Requirements
 ------------
 The below requirements are needed on the host that executes this module.
 
-- python >= 3.6
-- kubernetes >= 12.0.0
+- python >= 3.11
+- kubernetes >= 31.0.0
 
 
 Parameters
@@ -461,19 +461,19 @@ Examples
 .. code-block:: yaml
 
     - name: React to changes of all ConfigMaps
-      sabre1041.eda.k8s:
+      junipernetworks.eda.k8s:
         api_version: v1
         kind: ConfigMap
 
     - name: React to changes of all ConfigMaps with a name in a namespace
-      sabre1041.eda.k8s:
+      junipernetworks.eda.k8s:
         api_version: v1
         kind: ConfigMap
         namespace: mynamespace
         name: myconfigmap
 
     - name: React to changes of all ConfigMaps within a namespace with a specific label
-      sabre1041.eda.k8s:
+      junipernetworks.eda.k8s:
         api_version: v1
         kind: ConfigMap
         namespace: mynamespace
@@ -517,3 +517,4 @@ Authors
 ~~~~~~~
 
 - Andrew Block (@sabre1041)
+- Edwin Jacques (@ejacques)

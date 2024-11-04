@@ -3,7 +3,7 @@
 - name: Listen for ConfigMaps across
   hosts: all
   sources:
-    - sabre1041.eda.k8s:
+    - junipernetworks.eda.k8s:
         api_version: v1
         kind: ConfigMap
   rules:

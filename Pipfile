@@ -1,0 +1,17 @@
+[[source]]
+url = "https://pypi.org/simple"
+verify_ssl = true
+name = "pypi"
+# Packages in this list should ~=, used to generate requirements.txt
+
+[packages]
+kubernetes-asyncio = "*"
+kubernetes = "*"
+
+[dev-packages]
+ansible-lint = "*"
+pytest-asyncio = "*"
+pytest-kind = "*"
+
+[requires]
+python_version = "3.9"

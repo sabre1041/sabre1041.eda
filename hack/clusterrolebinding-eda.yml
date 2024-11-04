@@ -1,0 +1,13 @@
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: eda-service-account-binding
+subjects:
+  - kind: ServiceAccount
+    name: default  # Replace with the name of your service account
+    namespace: aap  # Replace with the namespace of your service account
+roleRef:
+  kind: ClusterRole
+  name: eda-service-account-role
+  apiGroup: rbac.authorization.k8s.io

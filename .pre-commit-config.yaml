@@ -1,0 +1,24 @@
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v3.2.0
+    hooks:
+      - id: trailing-whitespace
+      - id: end-of-file-fixer
+      - id: check-yaml
+      - id: check-added-large-files
+
+  - repo: https://github.com/ansible/ansible-lint.git
+    rev: v6.22.2
+    hooks:
+      - id: ansible-lint
+        files: \.(yaml|yml)$
+        name: Ansible Lint
+        description: Run configurations on .ansible-lint file
+        verbose: true
+        entry: python3 -m ansiblelint -v --force-color
+        additional_dependencies: ['jmespath']
+  - repo: https://github.com/psf/black-pre-commit-mirror
+    rev: 24.8.0
+    hooks:
+      - id: black
+        language_version: python3.9

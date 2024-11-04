@@ -1,0 +1,6 @@
+{
+    "python.testing.pytestArgs": ["--keep-cluster"],
+    "python.testing.unittestEnabled": false,
+    "python.testing.pytestEnabled": true,
+    "debugpy.debugJustMyCode": false
+}
