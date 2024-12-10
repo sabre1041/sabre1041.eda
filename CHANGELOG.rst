@@ -20,3 +20,10 @@ Major Changes
 - Remove extra files from packaging.
 - Use asynchronous Kubernetes API.
 - Include stack traces upon error.
+
+v1.1.1
+
+Major Changes
+-------------
+
+- Add support for watching multiple resources.

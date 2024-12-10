@@ -1,7 +1,7 @@
 import asyncio
 import pytest
 import time
-from plugins.event_source.k8s import main, INIT_DONE_EVENT
+from plugins.event_source.k8s import main, Watcher
 from kubernetes import client, config
 
 KUBECONFIG = ".pytest-kind/pytest-kind/kubeconfig"
@@ -83,7 +83,9 @@ def setup_namespace(request, k8s_client):
     return namespace
 
 
-async def wait_for_event(queue, event_type=INIT_DONE_EVENT, timeout=INIT_DONE_TIMEOUT):
+async def wait_for_event(
+    queue, event_type=Watcher.INIT_DONE_EVENT, timeout=INIT_DONE_TIMEOUT
+):
     """
     Wait for a specific event type to appear in the queue within a given timeout.
 
@@ -115,16 +117,31 @@ async def wait_for_event(queue, event_type=INIT_DONE_EVENT, timeout=INIT_DONE_TI
 
 
 @pytest.mark.asyncio
-async def test_namespace(k8s_client):
-    # Mock the arguments
-    args = {
-        "api_version": "v1",
-        "kind": "Namespace",
-        "kubeconfig": KUBECONFIG,
-        "test_events_qty": 1,
-        "heartbeat_interval": HEARTBEAT_INTERVAL,
-    }
-
+@pytest.mark.parametrize(
+    "args",
+    [
+        {
+            "api_version": "v1",
+            "kind": "Namespace",
+            "kubeconfig": KUBECONFIG,
+            "test_events_qty": 1,
+            "heartbeat_interval": HEARTBEAT_INTERVAL,
+        },
+        {
+            "api_version": "v1",
+            "kinds": [
+                {
+                    "kind": "Namespace",
+                },
+            ],
+            "kubeconfig": KUBECONFIG,
+            "test_events_qty": 1,
+            "heartbeat_interval": HEARTBEAT_INTERVAL,
+        },
+    ],
+    ids=["namespace_kind", "namespace_kinds"],
+)
+async def test_namespace(k8s_client, args):
     # Use a real asyncio.Queue
     queue = asyncio.Queue()
 
@@ -133,11 +150,11 @@ async def test_namespace(k8s_client):
 
     # Wait for the main function to be ready
     events = await wait_for_event(
-        queue, event_type=INIT_DONE_EVENT, timeout=INIT_DONE_TIMEOUT
+        queue, event_type=Watcher.INIT_DONE_EVENT, timeout=INIT_DONE_TIMEOUT
     )
     assert events
     assert len(events) > 0
-    assert events[-1]["type"] == INIT_DONE_EVENT
+    assert events[-1]["type"] == Watcher.INIT_DONE_EVENT
 
     # Create a Namespace in the kind cluster
     namespace_manifest = {
@@ -190,11 +207,11 @@ async def test_pod(k8s_client, request):
 
     # Wait for the main function to be ready
     events = await wait_for_event(
-        queue, event_type=INIT_DONE_EVENT, timeout=INIT_DONE_TIMEOUT
+        queue, event_type=Watcher.INIT_DONE_EVENT, timeout=INIT_DONE_TIMEOUT
     )
     assert events
     assert len(events) > 0
-    assert events[-1]["type"] == INIT_DONE_EVENT
+    assert events[-1]["type"] == Watcher.INIT_DONE_EVENT
 
     # Create a pod in the kind cluster
     pod_manifest = {
