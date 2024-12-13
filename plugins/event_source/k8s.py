@@ -107,30 +107,18 @@ class Watcher:
             list_response = await api.get(**options)
             if list_response.status == "Failure":
                 raise ApiException(list_response.message)
+            logging.info(f"{len(list_response.items)} existing object(s) found.")
+
             # Update the resource version
             self.resource_version = int(list_response.metadata.resourceVersion)
-            existing_objects = list_response.items
-            if existing_objects:
-                for obj in existing_objects:
-                    obj_as_dict = obj.to_dict()
-                    obj_as_json = json.dumps(obj_as_dict, indent=4)
-                    item = dict(type="ADDED", resource=obj_as_dict)
-                    object_name = self._get_object_name(obj)
-                    object_path = (
-                        options["namespace"] + "/" + object_name
-                        if "namespace" in options
-                        else object_name
-                    )
-                    self.logger.info("ADDED %s %s to queue", obj["kind"], object_path)
-                    self.logger.debug("Object Details: %s", obj_as_json)
-                    await self.queue.put(item)
-
             self.logger.debug(
                 f"Will initiate watch with resource {self.kind}, version {self.resource_version}"
             )
-
+            list_response_dict = list_response.to_dict()
             # Send an INIT_DONE_EVENT to indicate that we have processed all existing objects and the watch is initiating
-            await self.queue.put(dict(type=Watcher.INIT_DONE_EVENT))
+            await self.queue.put(
+                dict(type=Watcher.INIT_DONE_EVENT, resources=list_response_dict)
+            )
             self.logger.info("INIT_DONE_EVENT queued")
 
             while True:

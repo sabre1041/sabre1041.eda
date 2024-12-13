@@ -118,43 +118,54 @@ async def wait_for_event(
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
-    "args",
+    "test_case",
     [
         {
-            "api_version": "v1",
-            "kind": "Namespace",
-            "kubeconfig": KUBECONFIG,
-            "test_events_qty": 1,
-            "heartbeat_interval": HEARTBEAT_INTERVAL,
+            "args": {
+                "api_version": "v1",
+                "kind": "Namespace",
+                "kubeconfig": KUBECONFIG,
+                "test_events_qty": 1,
+                "heartbeat_interval": HEARTBEAT_INTERVAL,
+            }
         },
         {
-            "api_version": "v1",
-            "kinds": [
-                {
-                    "kind": "Namespace",
-                },
-            ],
-            "kubeconfig": KUBECONFIG,
-            "test_events_qty": 1,
-            "heartbeat_interval": HEARTBEAT_INTERVAL,
+            "args": {
+                "api_version": "v1",
+                "kinds": [
+                    {
+                        "kind": "Namespace",
+                    },
+                ],
+                "kubeconfig": KUBECONFIG,
+                "test_events_qty": 1,
+                "heartbeat_interval": HEARTBEAT_INTERVAL,
+            }
         },
     ],
     ids=["namespace_kind", "namespace_kinds"],
 )
-async def test_namespace(k8s_client, args):
+async def test_create(k8s_client, test_case):
     # Use a real asyncio.Queue
     queue = asyncio.Queue()
 
     # Run the main function in the background
-    main_task = asyncio.create_task(main(queue, args))
+    main_task = asyncio.create_task(main(queue, test_case["args"]))
 
-    # Wait for the main function to be ready
-    events = await wait_for_event(
-        queue, event_type=Watcher.INIT_DONE_EVENT, timeout=INIT_DONE_TIMEOUT
-    )
-    assert events
-    assert len(events) > 0
-    assert events[-1]["type"] == Watcher.INIT_DONE_EVENT
+    kinds = []
+    if "kind" in test_case["args"]:
+        kinds.append(test_case["args"]["kind"])
+    if "kinds" in test_case["args"]:
+        kinds.append(test_case["args"]["kinds"])
+
+    for _ in range(0, len(kinds)):
+        # Wait for each watch to finish initializing
+        events = await wait_for_event(
+            queue, event_type=Watcher.INIT_DONE_EVENT, timeout=INIT_DONE_TIMEOUT
+        )
+        assert events
+        assert len(events) == 1
+        assert events[-1]["type"] == Watcher.INIT_DONE_EVENT
 
     # Create a Namespace in the kind cluster
     namespace_manifest = {

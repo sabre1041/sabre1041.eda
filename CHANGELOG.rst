@@ -21,9 +21,10 @@ Major Changes
 - Use asynchronous Kubernetes API.
 - Include stack traces upon error.
 
-v1.1.1
+v1.1.2
 
 Major Changes
 -------------
 
 - Add support for watching multiple resources.
+- INIT_DONE event now includes all resources from get before watch in a resource list.
