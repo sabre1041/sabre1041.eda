@@ -127,7 +127,17 @@ async def wait_for_event(
                 "kubeconfig": KUBECONFIG,
                 "test_events_qty": 1,
                 "heartbeat_interval": HEARTBEAT_INTERVAL,
-            }
+            },
+            "k8sclient_objects": [
+                {
+                    "create": "create_namespace",
+                    "body": {
+                        "apiVersion": "v1",
+                        "kind": "Namespace",
+                        "metadata": {"name": "pytest-namespace"},
+                    },
+                },
+            ],
         },
         {
             "args": {
@@ -136,14 +146,41 @@ async def wait_for_event(
                     {
                         "kind": "Namespace",
                     },
+                    {
+                        "kind": "ConfigMap",
+                    },
                 ],
                 "kubeconfig": KUBECONFIG,
                 "test_events_qty": 1,
                 "heartbeat_interval": HEARTBEAT_INTERVAL,
-            }
+            },
+            "k8sclient_objects": [
+                {
+                    "create": "create_namespace",
+                    "body": {
+                        "apiVersion": "v1",
+                        "kind": "Namespace",
+                        "metadata": {"name": "pytest-namespace"},
+                    },
+                },
+                {
+                    "create": "create_namespaced_config_map",
+                    "body": {
+                        "apiVersion": "v1",
+                        "kind": "ConfigMap",
+                        "metadata": {
+                            "name": "example-configmap",
+                            "namespace": "pytest-namespace",
+                        },
+                        "data": {
+                            "key": "value",
+                        },
+                    },
+                },
+            ],
         },
     ],
-    ids=["namespace_kind", "namespace_kinds"],
+    ids=["namespace_kind", "namespace_configmap_kinds"],
 )
 async def test_create(k8s_client, test_case):
     # Use a real asyncio.Queue
@@ -156,7 +193,7 @@ async def test_create(k8s_client, test_case):
     if "kind" in test_case["args"]:
         kinds.append(test_case["args"]["kind"])
     if "kinds" in test_case["args"]:
-        kinds.append(test_case["args"]["kinds"])
+        kinds.extend(test_case["args"]["kinds"])
 
     for _ in range(0, len(kinds)):
         # Wait for each watch to finish initializing
@@ -167,30 +204,61 @@ async def test_create(k8s_client, test_case):
         assert len(events) == 1
         assert events[-1]["type"] == Watcher.INIT_DONE_EVENT
 
-    # Create a Namespace in the kind cluster
-    namespace_manifest = {
-        "apiVersion": "v1",
-        "kind": "Namespace",
-        "metadata": {"name": "pytest-namespace"},
-    }
-    k8s_client.create_namespace(body=namespace_manifest)
+    k8sclient_objects = test_case["k8sclient_objects"]
+
+    # Helper to invoke all object methods by name
+    def call_methods_by_name(method_name):
+        # Map kind to body
+        kinds = {}
+        for object in k8sclient_objects:
+            method = object.get(method_name)
+            if method:
+                body = object["body"]
+                metadata = body["metadata"]
+                namespace = metadata.get("namespace")
+                kind = body["kind"]
+                # Only expect one of kind
+                assert kind not in kinds
+                kinds[kind] = body
+                k8s_client_method = getattr(k8s_client, method)
+                if namespace:
+                    k8s_client_method(namespace=namespace, body=body)
+                else:
+                    k8s_client_method(body=body)
+        return kinds
+
+    # Create all client objects
+    created_kinds = call_methods_by_name("create")
 
     # Wait for the main function to complete
     await asyncio.wait_for(main_task, timeout=NAMESPACE_CREATION_TIMEOUT)
 
     # Make sure there is only one item in the queue
     queue_len = queue.qsize()
-    assert queue_len == 1
+    assert queue_len >= len(created_kinds)
+
+    # Get all the kinds that were created
+    added_kinds = {}
 
     # Retrieve all items from the queue to get the last item
-    ns_event = await queue.get()
+    try:
+        while True:
+            event = queue.get_nowait()
+            event_type = event["type"]
+            if event_type == "ADDED":
+                event_kind = event["resource"]["kind"]
+                resource = event["resource"]
+                added_kinds[event_kind] = resource
+                assert (
+                    resource["metadata"]["name"]
+                    == added_kinds[event_kind]["metadata"]["name"]
+                )
 
-    # Assertions
-    assert ns_event is not None  # Ensure the queue is not empty
-    assert ns_event["type"] == "ADDED"  # Check the type of the item
-    assert (
-        ns_event["resource"]["metadata"]["name"] == "pytest-namespace"
-    )  # Verify we received the correct namespace
+    except asyncio.QueueEmpty:
+        pass
+
+    # Ensure we received the correct kinds
+    assert added_kinds.keys() == created_kinds.keys()
 
 
 @pytest.mark.asyncio

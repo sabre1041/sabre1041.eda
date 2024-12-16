@@ -25,11 +25,13 @@ class Watcher:
         args: Dict[str, Any],
         configuration: client.Configuration,
         headers: Dict[str, Any],
+        order: int = 0,
     ):
         self.queue = queue
         self.args = args
         self.configuration = configuration
         self.headers = headers
+        self.order = order
         self.api_version = args.get("api_version", "v1")
         self.kind = args.get("kind")
         self.label_selectors = args.get("label_selectors", [])
@@ -47,9 +49,22 @@ class Watcher:
         self.apiclient = None
         self.dynamicclient = None
 
-    async def run(self):
+        # Supply get/watch options
+        self.options = dict(
+            watcher=self.watcher,
+            timeout=self.heartbeat_interval,
+        )
+        if self.label_selectors:
+            self.options["label_selector"] = self.label_selectors
+        if self.field_selectors:
+            self.options["field_selector"] = self.field_selectors
+        self.options.update(
+            dict(("namespace", self.args[k]) for k in ["namespace"] if k in self.args)
+        )
+
+    async def init(self):
         try:
-            self.logger.debug(f"Starting k8s eda source with args: {self.args}")
+            self.logger.debug(f"Initializing k8s eda source with args: {self.args}")
 
             if self.api_version is None or self.kind is None:
                 raise Exception(f"'api_version' and 'kind' parameters must be provided")
@@ -84,27 +99,11 @@ class Watcher:
             # Configure the watcher object. It uses the default client configuration.
             self.watcher = watch.Watch()
 
-            # Supply get/watch options
-            options = dict(
-                watcher=self.watcher,
-                timeout=self.heartbeat_interval,
-            )
-            if self.label_selectors:
-                options["label_selector"] = self.label_selectors
-            if self.field_selectors:
-                options["field_selector"] = self.field_selectors
-
-            options.update(
-                dict(
-                    ("namespace", self.args[k]) for k in ["namespace"] if k in self.args
-                )
-            )
-
-            # Fetch existing objects and treat them as "ADDED" events
-            api = await self.dynamicclient.resources.get(
+            # Fetch existing objects and send them in an INIT_DONE event.
+            self.api = await self.dynamicclient.resources.get(
                 api_version=self.api_version, kind=self.kind
             )
-            list_response = await api.get(**options)
+            list_response = await self.api.get(**self.options)
             if list_response.status == "Failure":
                 raise ApiException(list_response.message)
             logging.info(f"{len(list_response.items)} existing object(s) found.")
@@ -121,16 +120,27 @@ class Watcher:
             )
             self.logger.info("INIT_DONE_EVENT queued")
 
+        except Exception as e:
+            self.logger.error(f"Exception caught in init: {e}", exc_info=True)
+            raise
+
+    async def run(self):
+        if self.order:
+            # Delay the start of the watcher to avoid all watchers starting at the same time
+            await asyncio.sleep(self.order * 1)
+        try:
+            self.logger.debug(f"Starting k8s eda source...")
+
             while True:
                 try:
                     # Get resourceVersion to determine where to start streaming events from
-                    options.update(dict(resource_version=self.resource_version))
+                    self.options.update(dict(resource_version=self.resource_version))
 
                     self.logger.debug(
                         f"Initiating watch of resource {self.kind} at version {self.resource_version}"
                     )
                     timed_out = True
-                    async for e in self.dynamicclient.watch(api, **options):
+                    async for e in self.dynamicclient.watch(self.api, **self.options):
                         timed_out = False
                         raw_object = e["raw_object"]
                         object_name = self._get_object_name(raw_object)
@@ -187,10 +197,11 @@ class Watcher:
                         self.logger.error(f"API Exception caught: {e}", exc_info=True)
                         raise
 
-        except Exception as e:
-            self.logger.error(f"Exception caught in main: {e}", exc_info=True)
-            raise
-
+                except Exception as e:
+                    self.logger.error(
+                        f"Exception caught in run loop: {e}", exc_info=True
+                    )
+                    raise
         finally:
             await self.stop()
 
@@ -362,17 +373,36 @@ class WatchController:
             headers = self._create_headers(self.args)
 
             # Run the watcher(s)
+            order = 0
             if "kind" in self.args:
                 self.watchers.append(
-                    Watcher(self.queue, self.args, configuration, headers)
+                    Watcher(
+                        queue=self.queue,
+                        args=self.args,
+                        configuration=configuration,
+                        headers=headers,
+                        order=order,
+                    )
                 )
+                order += 1
             if "kinds" in self.args:
                 for kind in self.args["kinds"]:
                     self.watchers.append(
-                        Watcher(self.queue, kind, configuration, headers)
+                        Watcher(
+                            queue=self.queue,
+                            args=kind,
+                            configuration=configuration,
+                            headers=headers,
+                            order=order,
+                        )
                     )
+                    order += 1
 
-            # Await all watchers concurrently
+            # Await all watcher initialization in order
+            for watcher in self.watchers:
+                await watcher.init()
+
+            # Start all watchers concurrently
             await asyncio.gather(*(watcher.run() for watcher in self.watchers))
 
         except Exception as e:
