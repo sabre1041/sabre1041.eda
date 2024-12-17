@@ -9,7 +9,7 @@ Curated set of Event-Driven Ansible content
 The following set of content is included within this collection:
 
 
-### Event Sources 
+### Event Sources
 
 | Name  | Description |
 | ----- | ----------- |
@@ -30,7 +30,7 @@ The following is an example of how to use the Kubernetes Event Source Plugin wit
     - name: Notify
       condition: event.type == "ADDED"
       action:
-        debug:                      
+        debug:
 ```
 
 ## License

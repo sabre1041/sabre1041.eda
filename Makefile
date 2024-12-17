@@ -77,10 +77,10 @@ test-bin/kubectl:
 	curl -Lso "$@" $(kubectl_url)
 	chmod +x "$@"
 
-requirements.txt: pipenv
+$(EDA_COLLECTION_ROOT)/requirements.txt: pipenv
 	pipenv requirements --from-pipfile > "$@"
 
-release-build: pipenv requirements.txt
+release-build: pipenv $(EDA_COLLECTION_ROOT)/requirements.txt
 	rm -f $(EDA_COLLECTION_ROOT)/.eda-collection
 	make build
 

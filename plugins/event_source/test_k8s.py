@@ -1,11 +1,18 @@
 import asyncio
 import pytest
 import time
-from plugins.event_source.k8s import main, Watcher
 from kubernetes import client, config
 
+from plugins.event_source.k8s import (
+    main,
+    Watcher,
+)
+
+
+# Path to the kubeconfig file for the kind cluster
 KUBECONFIG = ".pytest-kind/pytest-kind/kubeconfig"
 
+# Timeout constants
 INIT_DONE_TIMEOUT = 10
 POD_CREATION_TIMEOUT = 60
 NAMESPACE_CREATION_TIMEOUT = 10
@@ -14,13 +21,20 @@ HEARTBEAT_INTERVAL = 3
 
 @pytest.fixture(scope="session")
 def kind_cluster(kind_cluster):
-    # This fixture will spin up a kind cluster for the duration of the session
+    """
+    Fixture to spin up a kind cluster for the duration of the session.
+    """
     yield kind_cluster
 
 
 @pytest.fixture(scope="session")
 def k8s_client(kind_cluster):
-    # Load kubeconfig and create a Kubernetes client
+    """
+    Fixture to load kubeconfig and create a Kubernetes client.
+
+    :param kind_cluster: The kind cluster fixture.
+    :return: Kubernetes CoreV1Api client.
+    """
     config.load_kube_config(
         str(kind_cluster.kubeconfig_path)
     )  # Convert PosixPath to string
@@ -29,6 +43,12 @@ def k8s_client(kind_cluster):
 
 @pytest.fixture(scope="function", autouse=True)
 def setup_namespace(request, k8s_client):
+    """
+    Fixture to set up the namespace for each test function.
+
+    :param request: The pytest request object.
+    :param k8s_client: The Kubernetes client fixture.
+    """
     # Get the namespace from the command-line argument or use "pytest" as default
     namespace = request.config.getoption("--namespace")
 
@@ -141,12 +161,13 @@ async def wait_for_event(
         },
         {
             "args": {
-                "api_version": "v1",
                 "kinds": [
                     {
+                        "api_version": "v1",
                         "kind": "Namespace",
                     },
                     {
+                        "api_version": "v1",
                         "kind": "ConfigMap",
                     },
                 ],
@@ -183,6 +204,12 @@ async def wait_for_event(
     ids=["namespace_kind", "namespace_configmap_kinds"],
 )
 async def test_create(k8s_client, test_case):
+    """
+    Test case to verify Kubernetes events are received correctly.
+
+    :param k8s_client: The Kubernetes client fixture.
+    :param test_case: The test case parameters.
+    """
     # Use a real asyncio.Queue
     queue = asyncio.Queue()
 
@@ -263,13 +290,19 @@ async def test_create(k8s_client, test_case):
 
 @pytest.mark.asyncio
 async def test_pod(k8s_client, request):
+    """
+    Test case to verify Pod events are received correctly.
+
+    :param k8s_client: The Kubernetes client fixture.
+    :param request: The pytest request object.
+    """
     namespace = request.config.getoption("--namespace")
 
     # Mock the arguments
     args = {
         "api_version": "v1",
         "kind": "Pod",
-        "label_selectors": [],
+        "label_selectors": ["type=eda"],
         "field_selectors": [],
         "name": "example-pod",
         "namespace": namespace,
@@ -296,7 +329,12 @@ async def test_pod(k8s_client, request):
     pod_manifest = {
         "apiVersion": "v1",
         "kind": "Pod",
-        "metadata": {"name": "example-pod"},
+        "metadata": {
+            "name": "example-pod",
+            "labels": {
+                "type": "eda",
+            },
+        },
         "spec": {
             "containers": [
                 {

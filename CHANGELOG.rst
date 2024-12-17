@@ -21,7 +21,7 @@ Major Changes
 - Use asynchronous Kubernetes API.
 - Include stack traces upon error.
 
-v1.1.3
+v1.1.12
 
 Major Changes
 -------------
