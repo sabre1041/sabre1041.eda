@@ -7,7 +7,14 @@
         api_version: v1
         kind: ConfigMap
   rules:
-    - name: Print Add Events
+    - name: Existing ConfigMaps
+      condition: event.type == "INIT_DONE" and event.resources.kind == "ConfigMapList"
+      action:
+        debug:
+          msg: "INIT_DONE: ConfigMaps: {{ event.resources }}"
+
+    - name: ConfigMap Added
       condition: event.type == "ADDED"
       action:
         debug:
+          msg: "ADDED: ConfigMap {{ event.resource.metadata.namespace }}/{{ event.resource.metadata.name }}"

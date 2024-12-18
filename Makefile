@@ -12,7 +12,7 @@ EDA_COLLECTION = junipernetworks-eda-$(VERSION).tar.gz
 KIND_VERSION := v0.25.0
 KUBERNETES_VERSION := v1.29.10
 
-.PHONY: setup build release-build install clean clean-pipenv pipenv test test-bin
+.PHONY: setup build release-build install clean clean-pipenv pipenv test clean-test-bin
 
 # Detect platform
 MACHINE := $(shell uname -m)
@@ -44,9 +44,9 @@ kubectl_url := https://dl.k8s.io/release/$(KUBERNETES_VERSION)/bin/$(os)/$(arch)
 # By default use .venv in the current directory
 export PIPENV_VENV_IN_PROJECT=1
 
-setup: clean-pipenv test-bin
+setup: clean-pipenv clean-test-bin test-bin
 	pyenv uninstall --force $(PY_VERSION)
-	rm -rf $(HOME)/.pyenv/versions/$(PY_VERSION) test-bin
+	rm -rf $(HOME)/.pyenv/versions/$(PY_VERSION)
 	$(PYENV_INSTALL_PREFIX) pyenv install --force $(PY_VERSION)
 	pip install pipenv pre-commit
 	$(MAKE) pipenv
@@ -61,11 +61,14 @@ pipenv:
 	pipenv install --dev
 
 clean-pipenv:
-	pipenv --rm || true
-	PIPENV_VENV_IN_PROJECT= pipenv --rm || true
+	pipenv --rm 2>/dev/null || true
+	PIPENV_VENV_IN_PROJECT= pipenv --rm 2>/dev/null || true
 	rm -rf .venv
 
-test-bin: test-bin/kubectl test-bin/kind
+clean-test-bin:
+	rm -rf test-bin
+
+test-bin: Makefile test-bin/kubectl test-bin/kind
 
 test-bin/kind:
 	mkdir -p test-bin

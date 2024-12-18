@@ -1,0 +1,36 @@
+---
+- name: Listen for newly created Namespace
+  hosts: all
+  sources:
+    - junipernetworks.eda.k8s:
+        kinds:
+          - api_version: v1
+            kind: Namespace
+          - api_version: v1
+            kind: Pod
+            label_selectors:
+              - app: myapp
+  rules:
+    - name: Existing Namespaces
+      condition: event.type == "INIT_DONE" and event.resources.kind == "NamespaceList"
+      action:
+        debug:
+          msg: "INIT_DONE: Namespaces: {{ event.resources }}"
+
+    - name: Namespace Added/Modified/Deleted
+      condition: event.resource.kind == "Namespace"
+      action:
+        debug:
+          msg: "{{ event.type }}: Namespace {{ event.resource.metadata.name }}"
+
+    - name: Existing Pods
+      condition: event.type == "INIT_DONE" and event.resources.kind == "PodList"
+      action:
+        debug:
+          msg: "INIT_DONE: Pods: {{ event.resources }}"
+
+    - name: Pod Added/Modified/Deleted
+      condition: event.resource.kind == "Pod"
+      action:
+        debug:
+          msg: "{{ event.type }}: Pod {{ event.resource.metadata.namespace }}/{{ event.resource.metadata.name }}, labels {{ event.resource.metadata.labels }}"
