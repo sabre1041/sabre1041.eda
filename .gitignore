@@ -5,3 +5,4 @@
 kind
 *.tmp
 test-bin/
+.env

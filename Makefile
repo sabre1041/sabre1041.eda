@@ -1,9 +1,11 @@
+REMOTE ?= origin
+
 EDA_COLLECTION_ROOT := .
 
 # Get all .py files in the EDA_COLLECTION_ROOT directory
 PY_FILES := $(shell find $(EDA_COLLECTION_ROOT) -name *.py)
 
-VERSION := $(shell sed -n '/^version: / s,.*"\(.*\)"$$,\1,p' $(EDA_COLLECTION_ROOT)/galaxy.yml)
+VERSION := $(shell grep '^version: ' "$(EDA_COLLECTION_ROOT)/galaxy.yml" | cut -d' ' -f2)
 
 PY_VERSION := $(shell cat .python-version)
 
@@ -30,11 +32,7 @@ ifeq ($(OS),Darwin)
 PYENV_INSTALL_PREFIX := PYTHON_CONFIGURE_OPTS=--enable-framework
 os := darwin
 else
-# Unix
 os=linux
-export LDFLAGS := -Wl,-rpath,$(shell brew --prefix openssl)/lib
-export CPPFLAGS := -I$(shell brew --prefix openssl)/include
-export CONFIGURE_OPTS := --with-openssl=$(shell brew --prefix openssl)
 endif
 
 # Determine the URL's for programs to download
@@ -44,29 +42,37 @@ kubectl_url := https://dl.k8s.io/release/$(KUBERNETES_VERSION)/bin/$(os)/$(arch)
 # By default use .venv in the current directory
 export PIPENV_VENV_IN_PROJECT=1
 
-setup: clean-pipenv clean-test-bin test-bin
+setup: clean-pipenv
 	pyenv uninstall --force $(PY_VERSION)
 	rm -rf $(HOME)/.pyenv/versions/$(PY_VERSION)
 	$(PYENV_INSTALL_PREFIX) pyenv install --force $(PY_VERSION)
-	pip install pipenv pre-commit
 	$(MAKE) pipenv
-	pre-commit install
 
 define install_collection_if_missing
 	pipenv run ansible-doc $(1) &>/dev/null || pipenv run ansible-galaxy collection install --ignore-certs --force $(1)
 endef
 
 pipenv:
-	pipenv --help &>/dev/null || pip install pipenv
-	pipenv install --dev
+	pipenv check 2>/dev/null || \
+		(pip install pipenv pre-commit && \
+		 pre-commit install && \
+		 pipenv install --dev)
 
 clean-pipenv:
 	pipenv --rm 2>/dev/null || true
 	PIPENV_VENV_IN_PROJECT= pipenv --rm 2>/dev/null || true
 	rm -rf .venv
 
-clean-test-bin:
-	rm -rf test-bin
+tag:
+	git tag -a $(VERSION) -m "Release $(VERSION)"
+	git push $(REMOTE) $(VERSION)
+	git push --tags
+
+image: build
+	mkdir -p build/collections
+	rm -f build/collections/junipernetworks-apstra.tar.gz
+	cp "$(EDA_COLLECTION)" build/collections/junipernetworks-eda.tar.gz
+	TAG=$(VERSION) pipenv run build/build_image.sh
 
 test-bin: Makefile test-bin/kubectl test-bin/kind
 
@@ -80,6 +86,9 @@ test-bin/kubectl:
 	curl -Lso "$@" $(kubectl_url)
 	chmod +x "$@"
 
+clean-test-bin:
+	rm -rf test-bin
+
 $(EDA_COLLECTION_ROOT)/requirements.txt: pipenv
 	pipenv requirements --from-pipfile > "$@"
 
@@ -92,7 +101,7 @@ build: $(EDA_COLLECTION_ROOT)/.eda-collection
 test: pipenv
 	pipenv run pytest
 
-$(EDA_COLLECTION_ROOT)/.eda-collection: $(EDA_COLLECTION_ROOT)/galaxy.yml  $(PY_FILES)
+$(EDA_COLLECTION_ROOT)/.eda-collection: $(EDA_COLLECTION_ROOT)/galaxy.yml  $(PY_FILES) Makefile
 	rm -f junipernetworks-eda-*.tar.gz
 	pipenv run ansible-galaxy collection build $(EDA_COLLECTION_ROOT)
 	touch "$@"

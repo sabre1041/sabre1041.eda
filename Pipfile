@@ -11,9 +11,10 @@ kubernetes = "*"
 [dev-packages]
 pytest-asyncio = "*"
 pytest-kind = "*"
-ansible-core = "*"
 black = "*"
 ansible-lint = "*"
+ansible-builder = "*"
+ansible-core = "*"
 
 [requires]
 python_version = "3.11"

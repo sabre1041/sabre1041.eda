@@ -4,7 +4,7 @@ namespace: junipernetworks
 
 name: eda
 
-version: 1.1.13
+version: 1.2.0
 
 readme: README.md
 

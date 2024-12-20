@@ -477,8 +477,27 @@ Examples
         api_version: v1
         kind: ConfigMap
         namespace: mynamespace
+
+    - name: React to changes of all ConfigMaps within a namespace, filtering MODIFIED events by specific fields
+      junipernetworks.eda.k8s:
+        api_version: v1
+        kind: ConfigMap
+        namespace: mynamespace
         label_selectors:
           - type=eda
+        changed_fields:
+          - data
+          - metadata.annotations.eda
+
+    - name: Watch multiple kinds with debug logging for pods.
+      junipernetworks.eda.k8s:
+        api_version: v1
+        kinds:
+          - kind: ConfigMap
+            namespace: configmap-namespace
+          - kind: Pod
+            namespace: pod-namespace
+            log_level: debug
 
 
 Return Values

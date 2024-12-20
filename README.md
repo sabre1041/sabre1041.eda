@@ -4,10 +4,34 @@
 
 Curated set of Event-Driven Ansible content.
 
+- [Event-Driven Ansible - k8s.eda](#event-driven-ansible---k8seda)
+  - [Included Content](#included-content)
+    - [Event Sources](#event-sources)
+  - [Usage](#usage)
+    - [Overview](#overview)
+    - [Examples](#examples)
+      - [Watching a Single Event](#watching-a-single-event)
+      - [Watching Multiple Events](#watching-multiple-events)
+      - [Watching Changes on Specific Fields](#watching-changes-on-specific-fields)
+  - [Configuration](#configuration)
+    - [Authentication](#authentication)
+    - [Authorization](#authorization)
+    - [Watch Configuration](#watch-configuration)
+  - [Building and Publishing a Decision Environment Image](#building-and-publishing-a-decision-environment-image)
+  - [Image Build](#image-build)
+    - [Image Publish](#image-publish)
+  - [Development Environment](#development-environment)
+    - [Setup](#setup)
+      - [Mac OS X](#mac-os-x)
+      - [Linux-based Systems](#linux-based-systems)
+      - [All Systems](#all-systems)
+    - [Usage](#usage-1)
+  - [License](#license)
+
+
 ## Included Content
 
 The following set of content is included within this collection:
-
 
 ### Event Sources
 
@@ -206,6 +230,107 @@ The following parameters are supported in the watch configuration.
 | field_selectors | Fields to filter resources | [] |
 | changed_fields | Filter modified events by specific fields | [] |
 | log_level | Log level. Can be (`CRITICAL`,`ERROR`,`INFO`,`DEBUG`,`NOTSET`) | `INFO` |
+
+## Building and Publishing a Decision Environment Image
+
+## Image Build
+
+To build the decision environment image, docker is required.
+
+You'll need to set the environment variables `RH_USERNAME` and `RH_PASSWORD` in the .env file at the root of your repo.  For example:
+
+```bash
+RH_USERNAME=jsmith
+RH_PASSWORD=XXXXXXXXXXXXXX
+```
+
+Then `make image` will create an image named `junipernetworks-eda-de:latest`.
+
+### Image Publish
+
+To publish an image, you'll need to set the REGISTRY_URL in your .env file to point to the location of the docker registry you use to publish Decision Environments. For example:
+
+```bash
+REGISTRY_URL=s-artifactory.juniper.net/de
+```
+
+Then, simply run `make image` again, and in addition to rebuilding (if needed), the image `apstra-de:latest` will be tagged and pushed to the location specified in the `REGISTRY_URL`.
+
+## Development Environment
+
+The following tools are recommended for development of this collection:
+1. [brew.sh](https://brew.sh/) -- Only needed for _Mac OS X_
+1. [pyenv](https://github.com/pyenv/pyenv/blob/master/README.md)
+2. [pipenv](https://github.com/pyenv/pyenv/blob/master/README.md)
+3. [pre-commit](https://github.com/pre-commit/pre-commit)
+
+### Setup
+
+#### Mac OS X
+
+1. If you're on a Mac and don't have brew, install it:
+    ```bash
+    /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+    ```
+2. If you have an ARM-based Mac, make sure the following is in your ~/.zprofile:
+   ```bash
+    eval "$(/opt/homebrew/bin/brew shellenv)"
+   ```
+   For Intel-based Mac, you may have to add this to ~/.zprofile instead:
+   ```bash
+    eval "$(/usr/local/bin/brew shellenv)"
+   ```
+
+3. Run the following command to install pyenv:
+   ```bash
+   brew install xz pyenv
+   ```
+
+4. Add this to your ~/.zprofile and restart your shell:
+    ```bash
+    export PYENV_ROOT="$HOME/.pyenv"
+    [[ -d $PYENV_ROOT/bin ]] && export PATH="$PYENV_ROOT/bin:$PATH"
+    eval "$(pyenv init -)"
+    ```
+
+#### Linux-based Systems
+
+1. Install pyenv:
+
+    ```bash
+    curl https://pyenv.run | bash
+    ```
+
+2. To set it up in your shell follow these instructions: https://github.com/pyenv/pyenv?tab=readme-ov-file#b-set-up-your-shell-environment-for-pyenv
+
+3. On _Ubuntu_, you'll need to install some packages to build Python properly:
+      ```bash
+      sudo apt -y install build-essential liblzma-dev libbz2-dev zlib1g zlib1g-dev libssl-dev libffi-dev libsqlite3-dev libncurses-dev libreadline-dev
+      ```
+
+#### All Systems
+
+1. Download the aos-sdk, from the [Juniper Download page for Apstra](https://support.juniper.net/support/downloads/?p=apstra). Select the option for the [Apstra Automation Python 3 SDK](https://webdownload.juniper.net/swdl/dl/secure/site/1/record/179819.html?pf=Apstra%20Fabric%20Conductor). The SDK is a closed-source project. Juniper Networks is actively working to split the Apstra client code out and open-source it, as that is the only part needed for this collection.
+
+2. The file that's downloaded will have either a 'whl' or a 'dms' extension. Just move the file to the expected location. For example: `mv ~/Downloads/aos_sdk-0.1.0-py3-none-any.dms build/wheels/aos_sdk-0.1.0-py3-none-any.whl`.
+
+3. Run the setup `make` target:
+   ```bash
+   make setup
+   ```
+
+4. Optional: Follow [pipenv command completion setup instructions](https://pipenv.pypa.io/en/stable/shell.html#shell-completion). Only do it if pipenv is installed in your global Python interpreter.
+
+### Usage
+
+To use the development environment after setting everything up, simply run the commands:
+
+  ```bash
+  pipenv install --dev
+  pipenv shell
+  ```
+
+This will start a new interactive prompt in which the known supported version of Ansible and required dependencies to use the Apstra SDK is installed.
 
 ## License
 

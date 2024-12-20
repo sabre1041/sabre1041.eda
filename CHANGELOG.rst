@@ -4,6 +4,15 @@ Junipernetworks EDA source Collection Release Notes
 
 .. contents:: Topics
 
+v1.2.0
+=======
+
+Major Changes
+-------------
+
+- Add support for filtering MODIFIED events by specific fields.
+- Add decision environment image build.
+
 v1.1.13
 =======
 
