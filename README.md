@@ -28,12 +28,15 @@ The `junipernetworks.eda.k8s` extension provides a reliable means for taking act
    * `namespace`
    * `label_selectors`
    * `field_selectors`
+   * `changed_fields`
 2. Obtain a list of existing objects that match the query upon startup via the `INIT_DONE` event.
 3. Get notified upon event types `ADDED`, `MODIFIED` and `DELETED` for resources matching the filters.
 
 This extension is implemented with the kubernetes_asyncio client, which is non-blocking, ensuring that the EDA activation will be responsive.
 
 ### Examples
+
+#### Watching a Single Event
 
 The following is an example of how to use the Kubernetes Event Source Plugin within an Ansible Rulebook. For [example](rulebooks/k8s.yml):
 
@@ -58,11 +61,13 @@ The following is an example of how to use the Kubernetes Event Source Plugin wit
           msg: "ADDED: ConfigMap {{ event.resource.metadata.namespace }}/{{ event.resource.metadata.name }}"
 ```
 
+#### Watching Multiple Events
+
 You can also listen an any number of objects in the same rulebook activation. For [example](rulebooks/k8s_multiple.yml):
 
 ```yaml
 ---
-- name: Listen for newly created Namespace
+- name: Listen for Namespace or Pod
   hosts: all
   sources:
     - junipernetworks.eda.k8s:
@@ -97,6 +102,29 @@ You can also listen an any number of objects in the same rulebook activation. Fo
       action:
         debug:
           msg: "{{ event.type }}: Pod {{ event.resource.metadata.namespace }}/{{ event.resource.metadata.name }} with labels {{ event.resource.metadata.labels }}"
+```
+
+#### Watching Changes on Specific Fields
+
+The event source can also be configured to monitor specific fields on a resource:
+
+```yaml
+- name: Listen for ConfigMaps across
+  hosts: all
+  sources:
+    - junipernetworks.eda.k8s:
+        api_version: v1
+        kind: ConfigMap
+        changed_fields:
+          - data
+          - metadata.annotations.foo
+
+  rules:
+    - name: Modified ConfigMap Specific Fields
+      condition: event.resource.kind == "ConfigMap" and event.type == "MODIFIED"
+      action:
+        debug:
+          msg: "{{ event.resource.metadata.name }} changed foo to {{ event.metadata.annotations.foo }}"
 ```
 
 ## Configuration
@@ -176,6 +204,7 @@ The following parameters are supported in the watch configuration.
 | namespace | Namespace to watch for `kind` | |
 | label_selectors | Labels to filter resources | [] |
 | field_selectors | Fields to filter resources | [] |
+| changed_fields | Filter modified events by specific fields | [] |
 | log_level | Log level. Can be (`CRITICAL`,`ERROR`,`INFO`,`DEBUG`,`NOTSET`) | `INFO` |
 
 ## License

@@ -1,5 +1,6 @@
 import asyncio
 import signal
+import json
 from typing import Any, Dict
 
 
@@ -114,6 +115,7 @@ class WatchController:
         "namespace",
         "label_selectors",
         "field_selectors",
+        "changed_fields",
         "log_level",
     }
 
@@ -446,6 +448,7 @@ class Watcher:
 
         self.label_selectors = args.get("label_selectors", [])
         self.field_selectors = args.get("field_selectors", [])
+        self.changed_fields = args.get("changed_fields", [])
 
         # Fix to avoid failing due to https://github.com/kubernetes-client/python/pull/2076
         if self.name:
@@ -495,6 +498,7 @@ class Watcher:
 
             self.logger.info(f"label_selectors: {self.label_selectors}")
             self.logger.info(f"field_selectors: {self.field_selectors}")
+            self.logger.info(f"changed_fields: {self.changed_fields}")
             self.logger.info(f"heartbeat_interval: {self.heartbeat_interval}")
 
             # Connect to the API
@@ -540,6 +544,24 @@ class Watcher:
         if self.order:
             # Delay the start of the watcher to avoid all watchers starting at the same time
             await asyncio.sleep(self.order * 1)
+
+        # Helper to get nested values from a dictionary like 'spec.containers.[0].image'
+        def get_nested_value(d, keys):
+            for key in keys:
+                if isinstance(d, list):
+                    try:
+                        stripped_key = key.lstrip("[").rstrip(
+                            "]"
+                        )  # Convert '[0]' to '0'
+                        key = int(stripped_key)
+                    except ValueError:
+                        self.logger.error(
+                            f"Invalid changed_field: {stripped_key}", exc_info=True
+                        )
+                        raise
+                d = d.get(key, {}) if isinstance(d, dict) else d[key]
+            return d
+
         try:
             self.logger.debug(f"Starting k8s eda source...")
 
@@ -554,17 +576,62 @@ class Watcher:
                     timed_out = True
                     async for e in self.dynamicclient.watch(self.api, **self.options):
                         timed_out = False
+                        event_type = e["type"]
                         raw_object = e["raw_object"]
+                        event_kind = raw_object["kind"]
                         object_name = self._get_object_name(raw_object)
+                        self.logger.debug(
+                            "%s %s %s to queue: %s",
+                            event_type,
+                            event_kind,
+                            object_name,
+                            raw_object,
+                        )
+
+                        # changed_fields is a list of fields that should be checked for changes.
+                        # If field specified in changed_fields exists in both the
+                        # kubectl.kubernetes.io/last-applied-configuration and the current object,
+                        # then the event is a change event and should be queued.
+                        # Otherwise, skip the event.
+                        if event_type == "MODIFIED" and self.changed_fields:
+                            last_applied_configuration_str = (
+                                raw_object.get("metadata", {})
+                                .get("annotations", {})
+                                .get(
+                                    "kubectl.kubernetes.io/last-applied-configuration",
+                                    "{}",
+                                )
+                            )
+                            last_applied_configuration = json.loads(
+                                last_applied_configuration_str
+                            )
+                            if any(
+                                get_nested_value(
+                                    last_applied_configuration, field.split(".")
+                                )
+                                != get_nested_value(raw_object, field.split("."))
+                                for field in self.changed_fields
+                            ):
+                                self.logger.debug(
+                                    "Change detected in %s fields %s, queuing event",
+                                    object_name,
+                                    self.changed_fields,
+                                )
+                            else:
+                                self.logger.debug(
+                                    "No change detected in fields %s, skipping event",
+                                    self.changed_fields,
+                                )
+                                continue
+
+                        # Info-level logging only for non-filtered events
                         self.logger.info(
                             "%s %s %s to queue",
-                            e["type"],
-                            raw_object["kind"],
+                            event_type,
+                            event_kind,
                             object_name,
                         )
-                        self.logger.debug("Detected object: %s", raw_object)
-
-                        await self.queue.put(dict(type=e["type"], resource=raw_object))
+                        await self.queue.put(dict(type=event_type, resource=raw_object))
 
                         # Update resource_version to the latest event
                         self.resource_version = int(

@@ -169,12 +169,15 @@ async def wait_for_event(
                     {
                         "api_version": "v1",
                         "kind": "ConfigMap",
+                        "namespace": "pytest-namespace",
                     },
                 ],
                 "kubeconfig": KUBECONFIG,
-                "test_events_qty": 1,
+                "test_events_qty": 3,
                 "heartbeat_interval": HEARTBEAT_INTERVAL,
             },
+            # An extra ConfigMap is created for the new Namespace
+            "created_watch_count": 3,
             "k8sclient_objects": [
                 {
                     "create": "create_namespace",
@@ -200,10 +203,118 @@ async def wait_for_event(
                 },
             ],
         },
+        {
+            "args": {
+                "kind": "ConfigMap",
+                "changed_fields": ["data", "metadata.annotations.foo"],
+                "kubeconfig": KUBECONFIG,
+                "test_events_qty": 5,
+                "heartbeat_interval": HEARTBEAT_INTERVAL,
+            },
+            "created_watch_count": 2,
+            "modified_watch_count": 3,
+            "k8sclient_objects": [
+                {
+                    "create": "create_namespaced_config_map",
+                    "body": {
+                        "apiVersion": "v1",
+                        "kind": "ConfigMap",
+                        "metadata": {
+                            "name": "change-me",
+                            "namespace": "pytest",
+                            "description": "CONFIG MAP TO MODIFY",
+                            "annotations": {
+                                "foo": "bar",
+                            },
+                        },
+                        "data": {
+                            "key": "old",
+                        },
+                    },
+                },
+                {
+                    "create": "create_namespaced_config_map",
+                    "body": {
+                        "apiVersion": "v1",
+                        "kind": "ConfigMap",
+                        "metadata": {
+                            "name": "static",
+                            "namespace": "pytest",
+                            "description": "STATIC CONFIG MAP",
+                        },
+                        "data": {
+                            "key": "no change ever",
+                        },
+                    },
+                },
+                {
+                    "modify": "patch_namespaced_config_map",
+                    "body": {
+                        "apiVersion": "v1",
+                        "kind": "ConfigMap",
+                        "metadata": {
+                            "name": "change-me",
+                            "namespace": "pytest",
+                            "description": "CHANGE 1",
+                        },
+                        "data": {
+                            "key": "new",
+                        },
+                    },
+                },
+                {
+                    "modify": "patch_namespaced_config_map",
+                    "body": {
+                        "apiVersion": "v1",
+                        "kind": "ConfigMap",
+                        "metadata": {
+                            "name": "change-me",
+                            "namespace": "pytest",
+                            "description": "CHANGE 2",
+                        },
+                        "data": {
+                            "key": "new2",
+                        },
+                    },
+                },
+                {
+                    "modify": "patch_namespaced_config_map",
+                    "body": {
+                        "apiVersion": "v1",
+                        "kind": "ConfigMap",
+                        "metadata": {
+                            "name": "static",
+                            "namespace": "pytest",
+                            # Description should trigger an event
+                            "description": "ONLY UPDATING DESCRIPTION",
+                        },
+                    },
+                },
+                {
+                    "modify": "patch_namespaced_config_map",
+                    "body": {
+                        "apiVersion": "v1",
+                        "kind": "ConfigMap",
+                        "metadata": {
+                            "name": "static",
+                            "namespace": "pytest",
+                            # Annotations change should not trigger event
+                            "annotations": {
+                                "foo": "CHANGED",
+                            },
+                        },
+                    },
+                },
+            ],
+        },
     ],
-    ids=["namespace_kind", "namespace_configmap_kinds"],
+    ids=[
+        "create_namespace_kind",
+        "create_namespace_configmap_kinds",
+        "modify_configmap_changed_fields",
+    ],
 )
-async def test_create(k8s_client, test_case):
+async def test_batch(k8s_client, test_case):
     """
     Test case to verify Kubernetes events are received correctly.
 
@@ -214,13 +325,14 @@ async def test_create(k8s_client, test_case):
     queue = asyncio.Queue()
 
     # Run the main function in the background
-    main_task = asyncio.create_task(main(queue, test_case["args"]))
+    args = test_case["args"]
+    main_task = asyncio.create_task(main(queue, args))
 
     kinds = []
-    if "kind" in test_case["args"]:
-        kinds.append(test_case["args"]["kind"])
-    if "kinds" in test_case["args"]:
-        kinds.extend(test_case["args"]["kinds"])
+    if "kind" in args:
+        kinds.append(args["kind"])
+    if "kinds" in args:
+        kinds.extend(args["kinds"])
 
     for _ in range(0, len(kinds)):
         # Wait for each watch to finish initializing
@@ -236,56 +348,56 @@ async def test_create(k8s_client, test_case):
     # Helper to invoke all object methods by name
     def call_methods_by_name(method_name):
         # Map kind to body
-        kinds = {}
+        bodies = []
         for object in k8sclient_objects:
             method = object.get(method_name)
             if method:
                 body = object["body"]
                 metadata = body["metadata"]
                 namespace = metadata.get("namespace")
-                kind = body["kind"]
-                # Only expect one of kind
-                assert kind not in kinds
-                kinds[kind] = body
+                name = metadata.get("name")
+                bodies.append(body)
                 k8s_client_method = getattr(k8s_client, method)
+                kwargs = dict(body=body)
                 if namespace:
-                    k8s_client_method(namespace=namespace, body=body)
-                else:
-                    k8s_client_method(body=body)
-        return kinds
+                    kwargs.update(namespace=namespace)
+                if method_name != "create":
+                    kwargs.update(name=name)
+                k8s_client_method(**kwargs)
+        return bodies
 
     # Create all client objects
-    created_kinds = call_methods_by_name("create")
+    created = call_methods_by_name("create")
+
+    # Modify all client objects
+    modified = call_methods_by_name("modify")
 
     # Wait for the main function to complete
     await asyncio.wait_for(main_task, timeout=NAMESPACE_CREATION_TIMEOUT)
 
     # Make sure there is only one item in the queue
     queue_len = queue.qsize()
-    assert queue_len >= len(created_kinds)
+    assert queue_len == args["test_events_qty"]
 
-    # Get all the kinds that were created
-    added_kinds = {}
-
+    # Ensure the correct number of kinds were created/added
     # Retrieve all items from the queue to get the last item
+    added_count = 0
+    modified_count = 0
     try:
         while True:
             event = queue.get_nowait()
             event_type = event["type"]
+            assert event_type in ["ADDED", "MODIFIED"]
             if event_type == "ADDED":
-                event_kind = event["resource"]["kind"]
-                resource = event["resource"]
-                added_kinds[event_kind] = resource
-                assert (
-                    resource["metadata"]["name"]
-                    == added_kinds[event_kind]["metadata"]["name"]
-                )
+                added_count += 1
+            elif event_type == "MODIFIED":
+                modified_count += 1
 
     except asyncio.QueueEmpty:
         pass
 
-    # Ensure we received the correct kinds
-    assert added_kinds.keys() == created_kinds.keys()
+    assert added_count == test_case.get("created_watch_count", len(created))
+    assert modified_count == test_case.get("modified_watch_count", len(modified))
 
 
 @pytest.mark.asyncio
