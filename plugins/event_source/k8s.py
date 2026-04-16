@@ -1,10 +1,11 @@
 import asyncio
+import functools
 import logging
-from ansible.module_utils.six import iteritems, string_types
-from kubernetes import config, dynamic, watch, client
-from kubernetes.client import api_client
-from typing import Any, Dict
 import os
+from typing import Any, Dict
+
+from kubernetes import client, config, dynamic, watch
+from kubernetes.client import api_client
 
 try:
     import urllib3
@@ -69,7 +70,7 @@ async def main(queue: asyncio.Queue, args: Dict[str, Any]):
         kind = args.get("kind")
 
         if api_version is None or args.get("kind") is None:
-            raise Exception(f"'api_version' and 'kind' parameters must be provided")
+            raise Exception("'api_version' and 'kind' parameters must be provided")
 
         watcher = watch.Watch()
 
@@ -81,7 +82,7 @@ async def main(queue: asyncio.Queue, args: Dict[str, Any]):
         ####
         if name:
             if not isinstance(field_selector, list):
-                field_selector = field_selector.split(',')
+                field_selector = field_selector.split(",")
             field_selector.append(f"metadata.name={name}")
         ####
 
@@ -97,34 +98,62 @@ async def main(queue: asyncio.Queue, args: Dict[str, Any]):
             field_selector=field_selector,
         )
 
-        options.update(dict((k, args[k]) for k in ['namespace'] if k in args))
+        options.update(dict((k, args[k]) for k in ["namespace"] if k in args))
 
         # Handle authentication
         auth_spec = _create_auth_spec(args)
         configuration = _create_configuration(auth_spec)
         headers = _create_headers(args)
         client = dynamic.DynamicClient(
-                api_client.ApiClient(configuration=configuration,)
-                )
+            api_client.ApiClient(configuration=configuration)
+        )
 
         for header, value in headers.items():
             _set_header(client, header, value)
 
+        loop = asyncio.get_event_loop()
+
         while True:
             try:
-                api = client.resources.get(api_version=api_version, kind=kind)
+                api = await loop.run_in_executor(
+                    None,
+                    functools.partial(
+                        client.resources.get,
+                        api_version=api_version,
+                        kind=kind,
+                    ),
+                )
 
-                # Get resourceVersion to determine where to start streaming events from
-                options.update(dict(resource_version=int(client.get(api, **options)["metadata"]["resourceVersion"])))
+                result = await loop.run_in_executor(
+                    None,
+                    functools.partial(client.get, api, **options),
+                )
+                options["resource_version"] = int(
+                    result["metadata"]["resourceVersion"]
+                )
 
-                for e in client.watch(api, **options, ):
-                    await queue.put(dict(type=e["type"], resource=e["raw_object"]))
-                    await asyncio.sleep(1)
+                watch_iter = await loop.run_in_executor(
+                    None,
+                    functools.partial(client.watch, api, **options),
+                )
+
+                while True:
+                    try:
+                        e = await loop.run_in_executor(
+                            None, next, watch_iter
+                        )
+                    except StopIteration:
+                        break
+                    await queue.put(
+                        dict(type=e["type"], resource=e["raw_object"])
+                    )
             except Exception as e:
                 logger.error("Exception caught: %s", e)
+                await asyncio.sleep(1)
     finally:
         logger.info("Stopping k8s eda source")
         watcher.stop()
+
 
 # Authentication functions from Kubernetes Core Module
 # https://github.com/ansible-collections/kubernetes.core/blob/main/plugins/module_utils/k8s/client.py
@@ -161,6 +190,7 @@ def _create_auth_spec(args: Dict[str, Any]) -> Dict:
 
     return auth
 
+
 def _create_headers(args: Dict[str, Any]):
     header_map = {
         "impersonate_user": "Impersonate-User",
@@ -181,12 +211,16 @@ def _create_headers(args: Dict[str, Any]):
             headers[header_name] = value
     return headers
 
+
 def _set_header(client, header, value):
     if isinstance(value, list):
         for v in value:
-            client.set_default_header(header_name=unique_string(header), header_value=v)
+            client.set_default_header(
+                header_name=unique_string(header), header_value=v
+            )
     else:
         client.set_default_header(header_name=header, header_value=value)
+
 
 class unique_string(str):
     _low = None
@@ -205,7 +239,6 @@ class unique_string(str):
             else:
                 self._low = unique_string(lower)
         return self._low
-
 
 
 def _create_configuration(auth: Dict):
@@ -246,11 +279,13 @@ def _create_configuration(auth: Dict):
     except AttributeError:
         configuration = client.Configuration()
 
-    for key, value in iteritems(auth):
+    for key, value in auth.items():
         if key in AUTH_ARG_MAP.keys() and value is not None:
             if key == "api_key":
                 setattr(
-                    configuration, key, {"authorization": "Bearer {0}".format(value)}
+                    configuration,
+                    key,
+                    {"authorization": "Bearer {0}".format(value)},
                 )
             elif key == "proxy_headers":
                 headers = urllib3.util.make_headers(**value)
@@ -261,7 +296,6 @@ def _create_configuration(auth: Dict):
     return configuration
 
 
-
 def _load_config(auth: Dict) -> None:
     kubeconfig = auth.get("kubeconfig")
     optional_arg = {
@@ -269,7 +303,7 @@ def _load_config(auth: Dict) -> None:
         "persist_config": auth.get("persist_config"),
     }
     if kubeconfig:
-        if isinstance(kubeconfig, string_types):
+        if isinstance(kubeconfig, str):
             config.load_kube_config(config_file=kubeconfig, **optional_arg)
         elif isinstance(kubeconfig, dict):
             config.load_kube_config_from_dict(
