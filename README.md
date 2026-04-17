@@ -1,6 +1,6 @@
 # Event-Driven Ansible - sabre1041.eda
 
-[![Build Status](https://github.com/sabre1041/sabre1041.eda/workflows/Lint/badge.svg?branch=main)](https://github.com/sabre1041/sabre1041.eda/actions?workflow=Lint)
+[![Build Status](https://github.com/sabre1041/sabre1041.eda/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/sabre1041/sabre1041.eda/actions/workflows/ci.yml)
 
 Curated set of Event-Driven Ansible content
 
@@ -34,9 +34,9 @@ The following is an example of how to use the Kubernetes Event Source Plugin wit
 ```
 
 ## Building a Decision Environment that includes this library
-The instructions provided here are for Automation Platform 2.5
+The instructions provided here are for Automation Platform 2.6
 
-For Automation Platform 2.4, replace `ansible-automation-platform-25` with `ansible-automation-platform-24` and remove the `additional_build_steps` section (that is not needed)
+For Automation Platform 2.5, replace `ansible-automation-platform-26` with `ansible-automation-platform-25` and remove the `additional_build_steps` section (that is not needed)
 
 Install `ansible-builder` on a Linux box (preferably Fedora or RHEL)
 ```
@@ -48,13 +48,13 @@ Install `podman` so that `ansible-builder` can build the image (otherwise it onl
 dnf install podman
 ```
 
-Create an `ansible-builder` source file to generate the Decision Environment and call it `eda-de-openshift-aap25.yaml`
+Create an `ansible-builder` source file to generate the Decision Environment and call it `eda-de-openshift-aap26.yaml`
 ```yaml
 version: 3
 
 images:
   base_image:
-    name: 'registry.redhat.io/ansible-automation-platform-25/de-minimal-rhel8:latest'
+    name: 'registry.redhat.io/ansible-automation-platform-26/de-minimal-rhel9:latest'
 
 dependencies:
   galaxy:
